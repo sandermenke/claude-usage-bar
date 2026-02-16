@@ -17,7 +17,7 @@ A lightweight macOS menu bar app to track your Claude.ai usage in real-time.
 ### Build from source
 
 ```bash
-git clone https://github.com/yourusername/claude-usage-bar.git
+git clone https://github.com/sandermenke/claude-usage-bar.git
 cd claude-usage-bar
 ./build.sh
 open ClaudeUsageBar.app
