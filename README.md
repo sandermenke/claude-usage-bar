@@ -1,8 +1,8 @@
-# ClaudeUsageBar
+# Claude Usage Popup
 
 A lightweight macOS menu bar app to track your Claude.ai usage in real-time.
 
-![ClaudeUsageBar Screenshot](screenshot.png)
+![Claude Usage Popup Screenshot](screenshot.png)
 
 ## Features
 
