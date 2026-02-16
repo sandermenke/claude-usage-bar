@@ -44,6 +44,17 @@ struct PopoverView: View {
                 .buttonStyle(.borderless)
                 .font(.caption)
                 .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button(action: {
+                    NSWorkspace.shared.open(URL(string: "https://x.com/sandermenke")!)
+                }) {
+                    Text("by @sandermenke")
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .foregroundColor(.secondary)
             }
         }
         .padding()

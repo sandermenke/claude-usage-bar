@@ -2,6 +2,8 @@
 
 A lightweight macOS menu bar app to track your Claude.ai usage in real-time.
 
+![ClaudeUsageBar Screenshot](screenshot.png)
+
 ## Features
 
 - **Color-coded spark icon** — green (<70%), orange (70-90%), red (>90%)
@@ -54,6 +56,10 @@ Your cookie is only ever sent to `claude.ai` endpoints. No telemetry, no externa
 
 - macOS 13.0 (Ventura) or later
 - Xcode Command Line Tools
+
+## Author
+
+Built by [@sandermenke](https://x.com/sandermenke)
 
 ## License
 
