@@ -1,0 +1,5 @@
+.build/
+ClaudeUsageBar.app/
+*.dmg
+.DS_Store
+.swiftpm/
