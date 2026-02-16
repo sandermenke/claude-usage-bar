@@ -172,8 +172,16 @@ struct UsageRow: View {
                         .foregroundColor(.secondary)
                 }
             }
-            ProgressView(value: min(pct, 1.0))
-                .tint(color)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.secondary.opacity(0.2))
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(color)
+                        .frame(width: geo.size.width * min(pct, 1.0))
+                }
+            }
+            .frame(height: 6)
             Text("\(Int(pct * 100))% used")
                 .font(.caption)
                 .foregroundColor(.secondary)

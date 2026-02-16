@@ -68,6 +68,10 @@ final class AppController: NSObject, NSApplicationDelegate {
         if model.hasCookie { model.fetch() }
 
         guard let btn = statusItem.button else { return }
+
+        // Activate the app so the popover renders focused (fixes tint colors)
+        NSApp.activate(ignoringOtherApps: true)
+
         popover.show(relativeTo: btn.bounds, of: btn, preferredEdge: .minY)
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             self?.closePopover()
