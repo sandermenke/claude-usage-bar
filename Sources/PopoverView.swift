@@ -3,82 +3,148 @@ import SwiftUI
 struct PopoverView: View {
     @ObservedObject var model: UsageModel
     @State private var showCookieInput = false
+    @State private var showPreferences = false
     @State private var cookieText = ""
 
+    // Persisted display preferences
+    @AppStorage("showSession") private var showSession = true
+    @AppStorage("showWeekly") private var showWeekly = true
+    @AppStorage("showSonnet") private var showSonnet = true
+    @AppStorage("showCredits") private var showCredits = true
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header
-            HStack {
-                Text("Claude Usage")
-                    .font(.headline)
-                Spacer()
-                if model.isLoading {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-            }
+        VStack(alignment: .leading, spacing: 14) {
+            header
 
             if let err = model.error {
-                Text(err)
+                Label(err, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if showPreferences {
+                preferencesPanel
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
             if model.hasFetched {
-                usageBars
-                creditsSection
-                Divider()
-                footer
-            } else {
-                Text("Set your session cookie below to get started.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .padding(.vertical, 4)
+                VStack(alignment: .leading, spacing: 14) {
+                    usageBars
+                    if showCredits { creditsSection }
+                }
+            } else if !showPreferences {
+                emptyState
             }
 
-            cookieSection
+            if showCookieInput {
+                cookieEditor
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
 
-            HStack {
-                Button("Quit") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .foregroundColor(.secondary)
+            Divider()
 
-                Spacer()
+            footer
+        }
+        .padding(16)
+        .frame(width: 340)
+        .animation(.easeInOut(duration: 0.18), value: showPreferences)
+        .animation(.easeInOut(duration: 0.18), value: showCookieInput)
+    }
 
-                Button(action: {
-                    NSWorkspace.shared.open(URL(string: "https://x.com/sandermenke")!)
-                }) {
-                    Text("by @sandermenke")
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .foregroundColor(.secondary)
+    // MARK: – Header
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Text("Claude Usage")
+                .font(.headline)
+
+            Spacer()
+
+            if model.isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(.trailing, 2)
+            }
+
+            IconButton(systemName: "arrow.clockwise", help: "Refresh") {
+                model.fetch()
+            }
+            .disabled(!model.hasCookie)
+
+            IconButton(systemName: "slider.horizontal.3", help: "Preferences", isActive: showPreferences) {
+                showPreferences.toggle()
             }
         }
-        .padding()
-        .frame(width: 340)
+    }
+
+    // MARK: – Preferences
+
+    private var preferencesPanel: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("SHOW IN POPUP")
+                .font(.caption2.weight(.semibold))
+                .foregroundColor(.secondary)
+                .padding(.bottom, 2)
+
+            prefToggle("Session (5 hour)", $showSession)
+            prefToggle("Weekly (7 day)", $showWeekly)
+            prefToggle("Weekly Sonnet", $showSonnet)
+            prefToggle("Usage credits", $showCredits)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.primary.opacity(0.05))
+        )
+    }
+
+    private func prefToggle(_ label: String, _ binding: Binding<Bool>) -> some View {
+        Toggle(isOn: binding) {
+            Text(label).font(.subheadline)
+        }
+        .toggleStyle(.switch)
+        .controlSize(.mini)
+        .tint(.accentColor)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: – Empty state
+
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: "sparkles")
+                .font(.title2)
+                .foregroundColor(.secondary)
+            Text("Set your session cookie to get started.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
     }
 
     // MARK: – Usage bars
 
     @ViewBuilder
     private var usageBars: some View {
-        UsageRow(
-            label: "Session (5 hour)",
-            pct: model.session.utilization / 100,
-            resetDate: model.session.resetsAt,
-            showDate: false
-        )
-        UsageRow(
-            label: "Weekly (7 day)",
-            pct: model.weekly.utilization / 100,
-            resetDate: model.weekly.resetsAt,
-            showDate: true
-        )
-        if model.hasWeeklySonnet {
+        if showSession {
+            UsageRow(
+                label: "Session (5 hour)",
+                pct: model.session.utilization / 100,
+                resetDate: model.session.resetsAt,
+                showDate: false
+            )
+        }
+        if showWeekly {
+            UsageRow(
+                label: "Weekly (7 day)",
+                pct: model.weekly.utilization / 100,
+                resetDate: model.weekly.resetsAt,
+                showDate: true
+            )
+        }
+        if showSonnet && model.hasWeeklySonnet {
             UsageRow(
                 label: "Weekly Sonnet",
                 pct: model.weeklySonnet.utilization / 100,
@@ -94,24 +160,15 @@ struct PopoverView: View {
     private var creditsSection: some View {
         if let c = model.credits {
             Divider()
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Usage credits").font(.subheadline)
+                    Text("Usage credits").font(.subheadline.weight(.medium))
                     Spacer()
                     Text("\(c.percent)% used")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color.secondary.opacity(0.2))
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(creditsColor(Double(c.percent) / 100))
-                            .frame(width: geo.size.width * min(Double(c.percent) / 100, 1.0))
-                    }
-                }
-                .frame(height: 6)
+                ProgressBar(pct: Double(c.percent) / 100, color: creditsColor(Double(c.percent) / 100))
                 HStack {
                     Text("\(c.usedText) spent")
                         .font(.caption)
@@ -139,71 +196,173 @@ struct PopoverView: View {
     // MARK: – Footer
 
     private var footer: some View {
-        HStack {
-            if let date = model.lastUpdated {
-                Text("Updated \(date.formatted(date: .omitted, time: .shortened))")
+        VStack(spacing: 10) {
+            HStack {
+                if let date = model.lastUpdated {
+                    Label(
+                        "Updated \(date.formatted(date: .omitted, time: .shortened))",
+                        systemImage: "clock"
+                    )
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                }
+                Spacer()
+                Link("by @sandermenke", destination: URL(string: "https://x.com/sandermenke")!)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            Spacer()
-            Button("Refresh") { model.fetch() }
-                .buttonStyle(.borderless)
-                .font(.caption)
+
+            HStack(spacing: 8) {
+                ChipButton(
+                    title: model.hasCookie ? "Update Cookie" : "Set Cookie",
+                    systemImage: "key.fill",
+                    isActive: showCookieInput
+                ) {
+                    showCookieInput.toggle()
+                }
+
+                Spacer()
+
+                ChipButton(title: "Quit", systemImage: "power", role: .destructive) {
+                    NSApplication.shared.terminate(nil)
+                }
+            }
         }
     }
 
     // MARK: – Cookie input
 
-    @ViewBuilder
-    private var cookieSection: some View {
-        Button(showCookieInput ? "Hide Cookie" : (model.hasCookie ? "Update Cookie" : "Set Session Cookie")) {
-            showCookieInput.toggle()
-        }
-        .buttonStyle(.borderless)
-        .font(.caption)
+    private var cookieEditor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("1. Go to claude.ai/settings/usage\n2. Open DevTools (⌘⌥I) → Network\n3. Refresh, click the \"usage\" request\n4. Copy the full Cookie header value")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-        if showCookieInput {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("1. Go to claude.ai/settings/usage\n2. Open DevTools (⌘⌥I) → Network\n3. Refresh, click the \"usage\" request\n4. Copy the full Cookie header value")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            TextEditor(text: $cookieText)
+                .font(.system(size: 11, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(4)
+                .frame(height: 54)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.primary.opacity(0.05))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.secondary.opacity(0.25))
+                )
 
-                TextEditor(text: $cookieText)
-                    .font(.system(size: 11, design: .monospaced))
-                    .frame(height: 50)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(Color.secondary.opacity(0.3))
-                    )
-
-                HStack(spacing: 8) {
-                    Button("Save & Fetch") {
-                        guard !cookieText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                            model.error = "Cookie is empty"
-                            return
-                        }
-                        model.cookie = cookieText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        model.fetch()
-                        showCookieInput = false
+            HStack(spacing: 8) {
+                Button("Save & Fetch") {
+                    guard !cookieText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        model.error = "Cookie is empty"
+                        return
                     }
-                    .buttonStyle(.borderedProminent)
+                    model.cookie = cookieText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    model.fetch()
+                    showCookieInput = false
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                if model.hasCookie {
+                    Button("Clear") {
+                        cookieText = ""
+                        model.clearData()
+                    }
+                    .buttonStyle(.bordered)
                     .controlSize(.small)
-
-                    if model.hasCookie {
-                        Button("Clear") {
-                            cookieText = ""
-                            model.clearData()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
                 }
             }
-            .padding(8)
-            .background(Color.secondary.opacity(0.08))
-            .cornerRadius(6)
         }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.primary.opacity(0.05))
+        )
+    }
+}
+
+// MARK: – Reusable controls
+
+/// A square icon button with a native hover highlight (Control Center style).
+struct IconButton: View {
+    let systemName: String
+    var help: String = ""
+    var isActive: Bool = false
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 26, height: 26)
+                .foregroundColor(isActive ? .accentColor : .primary)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(Color.primary.opacity(isActive ? 0.12 : (hovering ? 0.09 : 0)))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(help)
+    }
+}
+
+/// A pill-shaped text/icon button with a subtle fill and hover highlight.
+struct ChipButton: View {
+    let title: String
+    var systemImage: String? = nil
+    var role: ButtonRole? = nil
+    var isActive: Bool = false
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    private var tint: Color { role == .destructive ? .red : .primary }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let s = systemImage {
+                    Image(systemName: s).font(.system(size: 10, weight: .semibold))
+                }
+                Text(title)
+            }
+            .font(.caption.weight(.medium))
+            .foregroundColor(tint)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .background(
+                Capsule().fill(tint.opacity(isActive ? 0.16 : (hovering ? 0.12 : 0.07)))
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+}
+
+/// A rounded progress bar.
+struct ProgressBar: View {
+    let pct: Double
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.primary.opacity(0.1))
+                Capsule()
+                    .fill(color)
+                    .frame(width: max(0, geo.size.width * min(pct, 1.0)))
+            }
+        }
+        .frame(height: 6)
     }
 }
 
@@ -222,9 +381,9 @@ struct UsageRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(label).font(.subheadline)
+                Text(label).font(.subheadline.weight(.medium))
                 Spacer()
                 if let d = resetDate {
                     Text("Resets \(resetLabel(d))")
@@ -232,16 +391,7 @@ struct UsageRow: View {
                         .foregroundColor(.secondary)
                 }
             }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.secondary.opacity(0.2))
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(color)
-                        .frame(width: geo.size.width * min(pct, 1.0))
-                }
-            }
-            .frame(height: 6)
+            ProgressBar(pct: pct, color: color)
             Text("\(Int(pct * 100))% used")
                 .font(.caption)
                 .foregroundColor(.secondary)
