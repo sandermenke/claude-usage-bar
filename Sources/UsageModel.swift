@@ -6,12 +6,37 @@ struct UsageBucket {
     var resetsAt: Date?
 }
 
+struct CreditsInfo {
+    var enabled: Bool = false
+    var usedMinor: Int = 0
+    var limitMinor: Int = 0
+    var percent: Int = 0
+    var currency: String = "USD"
+    var exponent: Int = 2
+    var balanceMinor: Int?
+
+    private func money(_ minor: Int) -> String {
+        let value = Double(minor) / pow(10, Double(exponent))
+        let fmt = NumberFormatter()
+        fmt.numberStyle = .currency
+        fmt.currencyCode = currency
+        fmt.maximumFractionDigits = exponent
+        fmt.minimumFractionDigits = exponent
+        return fmt.string(from: NSNumber(value: value)) ?? String(format: "%.2f", value)
+    }
+
+    var usedText: String { money(usedMinor) }
+    var limitText: String { money(limitMinor) }
+    var balanceText: String? { balanceMinor.map { money($0) } }
+}
+
 @MainActor
 final class UsageModel: ObservableObject {
     @Published var session = UsageBucket()       // 5-hour
     @Published var weekly = UsageBucket()        // 7-day
     @Published var weeklySonnet = UsageBucket()  // 7-day sonnet (Pro)
     @Published var hasWeeklySonnet = false
+    @Published var credits: CreditsInfo?
     @Published var lastUpdated: Date?
     @Published var isLoading = false
     @Published var error: String?
@@ -64,6 +89,10 @@ final class UsageModel: ObservableObject {
                 let orgId = try await resolveOrgId(cookie: cookie)
                 let data = try await fetchUsage(orgId: orgId, cookie: cookie)
                 parse(data)
+                // Balance lives in a separate endpoint; treat it as supplementary.
+                if let balance = try? await fetchBalance(orgId: orgId, cookie: cookie) {
+                    credits?.balanceMinor = balance
+                }
                 lastUpdated = Date()
                 hasFetched = true
             } catch {
@@ -109,6 +138,22 @@ final class UsageModel: ObservableObject {
         return data
     }
 
+    private func fetchBalance(orgId: String, cookie: String) async throws -> Int {
+        var req = URLRequest(url: URL(string: "https://claude.ai/api/organizations/\(orgId)/prepaid/credits")!)
+        req.setValue(cookie, forHTTPHeaderField: "Cookie")
+        applyHeaders(&req)
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            throw URLError(.init(rawValue: code))
+        }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let amount = json["amount"] as? Int else {
+            throw URLError(.cannotParseResponse)
+        }
+        return amount
+    }
+
     private func applyHeaders(_ req: inout URLRequest) {
         req.setValue("*/*", forHTTPHeaderField: "Accept")
         req.setValue("https://claude.ai", forHTTPHeaderField: "Origin")
@@ -141,6 +186,23 @@ final class UsageModel: ObservableObject {
             hasWeeklySonnet = true
         } else {
             hasWeeklySonnet = false
+        }
+
+        if let spend = json["spend"] as? [String: Any] {
+            var c = CreditsInfo()
+            c.enabled = spend["enabled"] as? Bool ?? false
+            if let used = spend["used"] as? [String: Any] {
+                c.usedMinor = used["amount_minor"] as? Int ?? 0
+                c.currency = used["currency"] as? String ?? c.currency
+                c.exponent = used["exponent"] as? Int ?? c.exponent
+            }
+            if let limit = spend["limit"] as? [String: Any] {
+                c.limitMinor = limit["amount_minor"] as? Int ?? 0
+            }
+            c.percent = spend["percent"] as? Int ?? 0
+            credits = c
+        } else {
+            credits = nil
         }
 
         checkNotifications()
@@ -176,6 +238,7 @@ final class UsageModel: ObservableObject {
         weekly = UsageBucket()
         weeklySonnet = UsageBucket()
         hasWeeklySonnet = false
+        credits = nil
         hasFetched = false
         lastUpdated = nil
         error = nil

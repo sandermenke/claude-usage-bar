@@ -26,6 +26,7 @@ struct PopoverView: View {
 
             if model.hasFetched {
                 usageBars
+                creditsSection
                 Divider()
                 footer
             } else {
@@ -85,6 +86,54 @@ struct PopoverView: View {
                 showDate: true
             )
         }
+    }
+
+    // MARK: – Usage credits
+
+    @ViewBuilder
+    private var creditsSection: some View {
+        if let c = model.credits {
+            Divider()
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Usage credits").font(.subheadline)
+                    Spacer()
+                    Text("\(c.percent)% used")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color.secondary.opacity(0.2))
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(creditsColor(Double(c.percent) / 100))
+                            .frame(width: geo.size.width * min(Double(c.percent) / 100, 1.0))
+                    }
+                }
+                .frame(height: 6)
+                HStack {
+                    Text("\(c.usedText) spent")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(c.limitText) limit")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                if let bal = c.balanceText {
+                    Text("\(bal) balance")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+
+    private func creditsColor(_ pct: Double) -> Color {
+        if pct < 0.7 { return .accentColor }
+        if pct < 0.9 { return .orange }
+        return .red
     }
 
     // MARK: – Footer

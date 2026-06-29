@@ -21,7 +21,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         popover = NSPopover()
         popover.contentSize = NSSize(width: 340, height: 300)
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: PopoverView(model: model))
+        let hosting = NSHostingController(rootView: PopoverView(model: model))
+        hosting.sizingOptions = [.preferredContentSize]  // grow/shrink popover to fit content
+        popover.contentViewController = hosting
 
         // Observe model changes to update icon
         model.$session
