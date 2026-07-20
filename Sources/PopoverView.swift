@@ -9,7 +9,7 @@ struct PopoverView: View {
     // Persisted display preferences
     @AppStorage("showSession") private var showSession = true
     @AppStorage("showWeekly") private var showWeekly = true
-    @AppStorage("showSonnet") private var showSonnet = true
+    @AppStorage("showScopedWeekly") private var showScopedWeekly = true
     @AppStorage("showCredits") private var showCredits = true
 
     var body: some View {
@@ -89,7 +89,8 @@ struct PopoverView: View {
 
             prefToggle("Session (5 hour)", $showSession)
             prefToggle("Weekly (7 day)", $showWeekly)
-            prefToggle("Weekly Sonnet", $showSonnet)
+            prefToggle(scopedWeeklyLabel, $showScopedWeekly)
+                .disabled(model.scopedWeekly.isEmpty)
             prefToggle("Usage credits", $showCredits)
         }
         .padding(12)
@@ -97,6 +98,13 @@ struct PopoverView: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color.primary.opacity(0.05))
         )
+    }
+
+    /// Names the models the account actually has weekly limits for, so the
+    /// toggle never advertises a row that can't appear.
+    private var scopedWeeklyLabel: String {
+        let names = model.scopedWeekly.map(\.model)
+        return names.isEmpty ? "Weekly per-model (none)" : "Weekly \(names.joined(separator: ", "))"
     }
 
     private func prefToggle(_ label: String, _ binding: Binding<Bool>) -> some View {
@@ -144,13 +152,15 @@ struct PopoverView: View {
                 showDate: true
             )
         }
-        if showSonnet && model.hasWeeklySonnet {
-            UsageRow(
-                label: "Weekly Sonnet",
-                pct: model.weeklySonnet.utilization / 100,
-                resetDate: model.weeklySonnet.resetsAt,
-                showDate: true
-            )
+        if showScopedWeekly {
+            ForEach(model.scopedWeekly) { scoped in
+                UsageRow(
+                    label: "Weekly \(scoped.model)",
+                    pct: scoped.bucket.utilization / 100,
+                    resetDate: scoped.bucket.resetsAt,
+                    showDate: true
+                )
+            }
         }
     }
 

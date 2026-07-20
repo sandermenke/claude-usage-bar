@@ -6,6 +6,14 @@ struct UsageBucket {
     var resetsAt: Date?
 }
 
+/// A weekly limit scoped to a single model, e.g. "Weekly Opus".
+/// The API names the model at runtime, so the label isn't hardcoded.
+struct ScopedBucket: Identifiable {
+    var id: String { model }
+    var model: String
+    var bucket: UsageBucket
+}
+
 struct CreditsInfo {
     var enabled: Bool = false
     var usedMinor: Int = 0
@@ -34,8 +42,7 @@ struct CreditsInfo {
 final class UsageModel: ObservableObject {
     @Published var session = UsageBucket()       // 5-hour
     @Published var weekly = UsageBucket()        // 7-day
-    @Published var weeklySonnet = UsageBucket()  // 7-day sonnet (Pro)
-    @Published var hasWeeklySonnet = false
+    @Published var scopedWeekly: [ScopedBucket] = []  // per-model 7-day limits
     @Published var credits: CreditsInfo?
     @Published var lastUpdated: Date?
     @Published var isLoading = false
@@ -181,12 +188,7 @@ final class UsageModel: ObservableObject {
 
         if let s = bucket(from: "five_hour") { session = s }
         if let w = bucket(from: "seven_day") { weekly = w }
-        if let ws = bucket(from: "seven_day_sonnet") {
-            weeklySonnet = ws
-            hasWeeklySonnet = true
-        } else {
-            hasWeeklySonnet = false
-        }
+        scopedWeekly = parseScopedWeekly(json, fmt: fmt)
 
         if let spend = json["spend"] as? [String: Any] {
             var c = CreditsInfo()
@@ -206,6 +208,33 @@ final class UsageModel: ObservableObject {
         }
 
         checkNotifications()
+    }
+
+    /// Per-model weekly limits live in `limits[]` as `weekly_scoped` entries.
+    /// Older responses instead used top-level `seven_day_<model>` keys, which
+    /// are still present but null on current accounts — so fall back to those.
+    private func parseScopedWeekly(_ json: [String: Any], fmt: ISO8601DateFormatter) -> [ScopedBucket] {
+        if let limits = json["limits"] as? [[String: Any]] {
+            let scoped = limits.compactMap { entry -> ScopedBucket? in
+                guard entry["kind"] as? String == "weekly_scoped",
+                      let scope = entry["scope"] as? [String: Any],
+                      let model = scope["model"] as? [String: Any],
+                      let name = model["display_name"] as? String else { return nil }
+                var b = UsageBucket()
+                if let p = entry["percent"] as? Double { b.utilization = p }
+                if let s = entry["resets_at"] as? String { b.resetsAt = fmt.date(from: s) }
+                return ScopedBucket(model: name, bucket: b)
+            }
+            if !scoped.isEmpty { return scoped }
+        }
+
+        return ["seven_day_opus": "Opus", "seven_day_sonnet": "Sonnet"].compactMap { key, name in
+            guard let obj = json[key] as? [String: Any] else { return nil }
+            var b = UsageBucket()
+            if let u = obj["utilization"] as? Double { b.utilization = u }
+            if let s = obj["resets_at"] as? String { b.resetsAt = fmt.date(from: s) }
+            return ScopedBucket(model: name, bucket: b)
+        }
     }
 
     // MARK: – Notifications
@@ -236,8 +265,7 @@ final class UsageModel: ObservableObject {
         cookie = nil
         session = UsageBucket()
         weekly = UsageBucket()
-        weeklySonnet = UsageBucket()
-        hasWeeklySonnet = false
+        scopedWeekly = []
         credits = nil
         hasFetched = false
         lastUpdated = nil
